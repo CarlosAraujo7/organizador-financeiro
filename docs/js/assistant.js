@@ -147,8 +147,9 @@ COMO AGIR
 5. Nunca invente nome de cartão, pessoa ou local: se não foi dito, deixe em branco. Em compras parceladas, "valor" é o valor de cada parcela. Se o usuário disser só o total ("600 em 4x"), divida (150). Compra no crédito à vista é "gasto".
 6. Fotos, prints e extratos: extraia cada transação visível como um item e ignore saldos e totais. Se algo estiver ilegível, diga qual parte.
 7. Perguntas sobre os dados: chame consultar_mes ou proximos_vencimentos e responda só com o que voltou. Quando o filtro for "hoje" ou "ontem", use a data do lançamento para conferir.
-8. Responda em português do Brasil, com tom simpático e direto, curto, sem repetir o que já aparece nos cartões. Dinheiro no formato R$ 1.234,56. Pode usar **negrito** e listas com "-".
-9. Você só organiza registros: não movimenta dinheiro nem recomenda investimentos. Pode sugerir cortes e ajustes de orçamento com base nos números reais do usuário.`;
+8. Texto vindo de voz pode trazer a mesma frase repetida em sequência por erro do reconhecimento: trate como UMA só informação, sem propor o item duas vezes. Só proponha dois itens iguais se o usuário disser claramente que são dois (ex.: "dois cafés de 8").
+9. Responda em português do Brasil, com tom simpático e direto, curto, sem repetir o que já aparece nos cartões. Dinheiro no formato R$ 1.234,56. Pode usar **negrito** e listas com "-".
+10. Você só organiza registros: não movimenta dinheiro nem recomenda investimentos. Pode sugerir cortes e ajustes de orçamento com base nos números reais do usuário.`;
 }
 
 /* ====================================================== normalização dos itens */
@@ -628,12 +629,34 @@ async function prepareImage(file) {
 
 /* ------------------------------------------------------------------ voz */
 /* Segurar para falar: escuta enquanto o botão estiver pressionado e envia ao soltar.
- * O reconhecimento do navegador encerra sozinho numa pausa, então, se isso acontecer com o
- * botão ainda pressionado, ele é reiniciado e o texto das sessões anteriores é mantido. */
+ * O reconhecimento do navegador encerra sozinho numa pausa (continuous=false, o modo estável no
+ * celular: continuous=true devolve a frase repetida), então, se isso acontecer com o botão ainda
+ * pressionado, ele é reiniciado e o texto das sessões anteriores é mantido. */
 let voice = null; // { holding, startedAt, base, done, cur, failed }
 
-function voiceText() {
-  return [voice.base, voice.done, voice.cur].filter(Boolean).join(' ').trim();
+const speechKey = (s) => norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Junta dois trechos falados sem repetir: ignora maiúscula, acento e pontuação, e trata um
+ *  trecho que só reafirma o outro (igual ou com mais palavras) como o mesmo trecho. */
+function joinSpeech(a, b) {
+  a = (a || '').trim(); b = (b || '').trim();
+  if (!a || !b) return a || b;
+  const ka = speechKey(a) + ' ', kb = speechKey(b) + ' ';
+  if (ka.startsWith(kb)) return a;
+  if (kb.startsWith(ka)) return b;
+  return a + ' ' + b;
+}
+
+/** Se o texto é a mesma frase duas vezes seguidas, fica só uma. */
+function collapseRepeat(s) {
+  const w = s.split(/\s+/).filter(Boolean);
+  const half = w.length / 2;
+  if (w.length >= 2 && Number.isInteger(half) && speechKey(w.slice(0, half).join(' ')) === speechKey(w.slice(half).join(' '))) return w.slice(0, half).join(' ');
+  return s;
+}
+
+function voiceText(v) {
+  return collapseRepeat(joinSpeech(v.base, joinSpeech(v.done, v.cur)));
 }
 
 function runRecognition(SR) {
@@ -641,18 +664,14 @@ function runRecognition(SR) {
   recog = rec;
   rec.lang = 'pt-BR';
   rec.interimResults = true;
-  rec.continuous = true;
+  rec.continuous = false;
   rec.onresult = (e) => {
     if (recog !== rec) return;
     let text = '';
-    for (let i = 0; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript.trim();
-      // alguns navegadores móveis repetem o texto acumulado em cada resultado
-      text = t && text && t.startsWith(text) ? t : [text, t].filter(Boolean).join(' ');
-    }
-    voice.cur = text;
+    for (let i = 0; i < e.results.length; i++) text = joinSpeech(text, e.results[i][0].transcript);
+    voice.cur = collapseRepeat(text);
     const input = $('chat-input');
-    if (input) { input.value = voiceText(); autosize(); }
+    if (input) { input.value = voiceText(voice); autosize(); }
   };
   rec.onerror = (e) => {
     if (e.error === 'no-speech' || e.error === 'aborted') return;
@@ -662,7 +681,7 @@ function runRecognition(SR) {
   };
   rec.onend = () => {
     if (recog !== rec) return;
-    voice.done = [voice.done, voice.cur].filter(Boolean).join(' '); voice.cur = '';
+    voice.done = joinSpeech(voice.done, voice.cur); voice.cur = '';
     if (voice.holding && !voice.failed) {
       try { runRecognition(SR); return; } catch (e) { /* cai para o encerramento abaixo */ }
     }
@@ -694,7 +713,7 @@ function finishVoice() {
   voice = null; recog = null;
   listening = false; setComposerState();
   const input = $('chat-input');
-  if (input) { input.value = [v.base, v.done, v.cur].filter(Boolean).join(' ').trim(); autosize(); }
+  if (input) { input.value = voiceText(v); autosize(); }
   if (v.done || v.cur) submitComposer(); // os cartões de confirmação são a rede de segurança contra erro de reconhecimento
   else if (!v.failed && Date.now() - v.startedAt < 600) toast('Segure o botão do microfone enquanto fala e solte para enviar.');
 }
