@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Livro-Caixa</title>
+  <meta name="description" content="Controle financeiro pessoal com assistente de IA: conte o gasto por texto, voz ou foto e confirme.">
+  <meta name="theme-color" content="#F5F4FB" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B0C1E" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Livro-Caixa">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script>
+    /* aplica o tema escolhido antes de pintar a tela (evita piscar) */
+    try { var t = localStorage.getItem('livro-caixa-tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="painel">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="icons/icon.svg" alt="" width="42" height="42">
+        <div><strong>Livro-Caixa</strong><small>controle financeiro</small></div>
+      </div>
+      <nav id="side-nav" aria-label="Principal"></nav>
+      <div class="sidebar-foot"><span class="dot ok" id="save-dot"></span><span id="save-text">Dados salvos neste aparelho</span></div>
+    </aside>
+
+    <div class="main-col">
+      <header class="topbar">
+        <div class="topbar-title">
+          <img class="brand-mini" src="icons/icon.svg" alt="" width="34" height="34">
+          <div><h1 id="view-title">Painel</h1><p id="view-sub"></p></div>
+        </div>
+        <div class="month-picker" id="month-picker">
+          <button type="button" id="month-prev" aria-label="Mês anterior">&#8249;</button>
+          <span id="month-label" class="num" aria-live="polite">—</span>
+          <button type="button" id="month-next" aria-label="Próximo mês">&#8250;</button>
+        </div>
+      </header>
+      <main id="view-root" class="view-root"></main>
+    </div>
+
+    <nav class="tabbar" id="tabbar" aria-label="Principal"></nav>
+  </div>
+
+  <dialog id="modal" aria-labelledby="modal-title">
+    <form id="modal-form" novalidate>
+      <div class="sheet-grab" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="modal-title">Novo lançamento</h2>
+        <button type="button" id="modal-close" class="icon-btn" aria-label="Fechar">&#215;</button>
+      </div>
+      <div id="modal-body"></div>
+      <p id="modal-error" class="form-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="modal-delete" class="btn danger" hidden>Excluir</button>
+        <div class="right-group">
+          <button type="button" id="modal-cancel" class="btn ghost">Cancelar</button>
+          <button type="submit" id="modal-save" class="btn primary">Salvar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="chart-tip" class="chart-tip"></div>
+  <datalist id="tag-suggestions"></datalist>
+
+  <noscript><p style="padding:24px;font-family:sans-serif">O Livro-Caixa precisa de JavaScript para funcionar.</p></noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+
+# Nunca versionar chaves nem dados financeiros: o app guarda a chave e os lançamentos só no
+# navegador de quem usa. Backups exportados (.json) também ficam de fora.
+.env
+*.key
+livro-caixa-backup-*.json
+
+# versão antiga (arquivo único): tem os seus dados de exemplo embutidos, por isso NÃO vai para o GitHub
+Livro-Caixa.html
+
+# configuração local do ambiente de desenvolvimento
+.claude/
