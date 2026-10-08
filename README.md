@@ -50,7 +50,7 @@ git push -u origin main
 1. Abra o link do GitHub Pages no celular.
 2. **Android (Chrome)**: menu ⋮ → *Instalar app*. **iPhone (Safari)**: Compartilhar → *Adicionar à Tela de Início*.
 3. Em **Ajustes**, cole a chave do Gemini **no celular também** (cada aparelho guarda a sua).
-4. No assistente, toque no microfone e fale ("gastei 30 no Uber"), ou no ícone de imagem para mandar a foto de um comprovante.
+4. No assistente, **segure** o microfone, fale ("gastei 30 no Uber") e solte para enviar, ou no ícone de imagem para mandar a foto de um comprovante.
 
 > **Celular e computador não sincronizam sozinhos.** Os dados de cada aparelho ficam no próprio navegador. Para levar de um para o outro: **Ajustes → Exportar / Compartilhar backup** num, **Importar backup** no outro (importar substitui o que está lá). Se usar mais o celular, trate-o como aparelho principal e exporte um backup de vez em quando.
 

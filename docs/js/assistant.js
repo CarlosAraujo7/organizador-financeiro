@@ -541,7 +541,7 @@ function setComposerState() {
   const send = $('btn-send'), input = $('chat-input'), mic = $('btn-mic');
   // o campo de texto não é desabilitado (no celular isso fecharia o teclado); envios durante a espera são ignorados
   if (send) send.disabled = busy;
-  if (input) input.placeholder = busy ? 'Pensando…' : 'Conte um gasto…';
+  if (input) input.placeholder = busy ? 'Pensando…' : listening ? 'Ouvindo… solte para enviar' : 'Conte um gasto…';
   if (mic) mic.classList.toggle('on', listening);
 }
 function autosize() {
@@ -591,7 +591,7 @@ export function renderAssistantShell() {
         <button type="button" class="icon-btn" id="btn-attach" data-chat="attach" aria-label="Enviar foto de comprovante ou extrato">${icon('image', 22)}</button>
         <input type="file" id="file-input" accept="image/*" hidden>
         <textarea id="chat-input" rows="1" placeholder="Conte um gasto…" enterkeyhint="send" aria-label="Mensagem para o assistente"></textarea>
-        ${supportsVoice ? `<button type="button" class="icon-btn" id="btn-mic" data-chat="mic" aria-label="Falar">${icon('mic', 22)}</button>` : ''}
+        ${supportsVoice ? `<button type="button" class="icon-btn" id="btn-mic" aria-label="Segure para falar" title="Segure para falar">${icon('mic', 22)}</button>` : ''}
         <button type="submit" class="send-btn" id="btn-send" aria-label="Enviar">${icon('send', 20)}</button>
       </form>
     </div>
@@ -627,34 +627,76 @@ async function prepareImage(file) {
 }
 
 /* ------------------------------------------------------------------ voz */
-function toggleMic() {
+/* Segurar para falar: escuta enquanto o botão estiver pressionado e envia ao soltar.
+ * O reconhecimento do navegador encerra sozinho numa pausa, então, se isso acontecer com o
+ * botão ainda pressionado, ele é reiniciado e o texto das sessões anteriores é mantido. */
+let voice = null; // { holding, startedAt, base, done, cur, failed }
+
+function voiceText() {
+  return [voice.base, voice.done, voice.cur].filter(Boolean).join(' ').trim();
+}
+
+function runRecognition(SR) {
+  const rec = new SR();
+  recog = rec;
+  rec.lang = 'pt-BR';
+  rec.interimResults = true;
+  rec.continuous = true;
+  rec.onresult = (e) => {
+    if (recog !== rec) return;
+    let text = '';
+    for (let i = 0; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript.trim();
+      // alguns navegadores móveis repetem o texto acumulado em cada resultado
+      text = t && text && t.startsWith(text) ? t : [text, t].filter(Boolean).join(' ');
+    }
+    voice.cur = text;
+    const input = $('chat-input');
+    if (input) { input.value = voiceText(); autosize(); }
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    voice.failed = true;
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Libere o microfone para este site nas permissões do navegador.', 'err');
+    else toast('Não consegui ouvir (' + e.error + '). Tente de novo.', 'err');
+  };
+  rec.onend = () => {
+    if (recog !== rec) return;
+    voice.done = [voice.done, voice.cur].filter(Boolean).join(' '); voice.cur = '';
+    if (voice.holding && !voice.failed) {
+      try { runRecognition(SR); return; } catch (e) { /* cai para o encerramento abaixo */ }
+    }
+    finishVoice();
+  };
+  rec.start();
+}
+
+function startVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { toast('Este navegador não tem reconhecimento de voz. Use o microfone do teclado.', 'err'); return; }
-  if (listening && recog) { recog.stop(); return; }
-  recog = new SR();
-  recog.lang = 'pt-BR';
-  recog.interimResults = true;
-  recog.continuous = false;
-  let heardFinal = false;
-  recog.onresult = (e) => {
-    let finalText = '', interim = '';
-    for (let i = 0; i < e.results.length; i++) {
-      const r = e.results[i];
-      if (r.isFinal) { finalText += r[0].transcript; heardFinal = true; } else interim += r[0].transcript;
-    }
-    const input = $('chat-input');
-    if (input) { input.value = (finalText + interim).trim(); autosize(); }
-  };
-  recog.onerror = (e) => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Libere o microfone para este site nas permissões do navegador.', 'err');
-    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Não consegui ouvir (' + e.error + '). Tente de novo.', 'err');
-  };
-  recog.onend = () => {
-    listening = false; setComposerState();
-    if (heardFinal) submitComposer(); // os cartões de confirmação são a rede de segurança contra erro de reconhecimento
-  };
-  try { recog.start(); listening = true; setComposerState(); }
-  catch (e) { listening = false; setComposerState(); }
+  if (voice) return;
+  const input = $('chat-input');
+  voice = { holding: true, startedAt: Date.now(), base: input ? input.value.trim() : '', done: '', cur: '', failed: false };
+  listening = true; setComposerState();
+  try { runRecognition(SR); }
+  catch (e) { finishVoice(); }
+}
+
+function stopVoice() {
+  if (!voice || !voice.holding) return;
+  voice.holding = false;
+  try { recog.stop(); } catch (e) { finishVoice(); } // stop() entrega o que já foi dito e então dispara onend
+}
+
+function finishVoice() {
+  const v = voice;
+  if (!v) return;
+  voice = null; recog = null;
+  listening = false; setComposerState();
+  const input = $('chat-input');
+  if (input) { input.value = [v.base, v.done, v.cur].filter(Boolean).join(' ').trim(); autosize(); }
+  if (v.done || v.cur) submitComposer(); // os cartões de confirmação são a rede de segurança contra erro de reconhecimento
+  else if (!v.failed && Date.now() - v.startedAt < 600) toast('Segure o botão do microfone enquanto fala e solte para enviar.');
 }
 
 /* ---------------------------------------------------------------- eventos */
@@ -711,7 +753,6 @@ export function initAssistant() {
         break;
       case 'attach': $('file-input').click(); break;
       case 'remove-image': pendingImage = null; renderAttach(); break;
-      case 'mic': toggleMic(); break;
       case 'retry': {
         if (!lastReq || busy) break;
         const { text, image } = lastReq;
@@ -729,6 +770,26 @@ export function initAssistant() {
       default: break;
     }
   });
+
+  // microfone: segurar para falar, soltar para enviar (o toque fica "preso" ao botão mesmo se o dedo escorregar)
+  root.addEventListener('pointerdown', (e) => {
+    const mic = e.target.closest('#btn-mic');
+    if (!mic || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    try { mic.setPointerCapture(e.pointerId); } catch (err) { /* sem captura, o pointerup ainda chega enquanto o dedo estiver sobre o botão */ }
+    startVoice();
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => {
+    root.addEventListener(ev, (e) => { if (e.target.closest('#btn-mic')) stopVoice(); });
+  });
+  root.addEventListener('contextmenu', (e) => { if (e.target.closest('#btn-mic')) e.preventDefault(); });
+  root.addEventListener('keydown', (e) => {
+    if (e.target.id === 'btn-mic' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); if (!e.repeat) startVoice(); }
+  });
+  root.addEventListener('keyup', (e) => {
+    if (e.target.id === 'btn-mic' && (e.key === ' ' || e.key === 'Enter')) stopVoice();
+  });
+  window.addEventListener('blur', stopVoice);
 
   root.addEventListener('submit', (e) => {
     if (e.target.id !== 'composer') return;
